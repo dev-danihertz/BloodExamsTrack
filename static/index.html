@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BloodExamsTrack</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; }
+        body { font-family: system-ui; background: var(--bg); margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 5px; }
+        .tab-btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background: #e2e8f0; font-weight: bold; white-space: nowrap; }
+        .tab-btn.active { background: var(--primary); color: white; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        input, select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button.main { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin-top: 10px; }
+        button.secondary { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+        .hidden { display: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #f1f5f9; }
+        th { background: #f8fafc; color: #64748b; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🩸 BloodExamsTrack</h1>
+        
+        <div class="tabs">
+            <button class="tab-btn active" id="btn-dashboard" onclick="showTab('dashboard')">Dashboard</button>
+            <button class="tab-btn" id="btn-exams" onclick="showTab('exams')">Histórico/Novo</button>
+            <button class="tab-btn" id="btn-markers" onclick="showTab('markers')">Configurar Marcadores</button>
+        </div>
+
+        <!-- ABA DASHBOARD (GRÁFICOS) -->
+        <div id="tab-dashboard">
+            <div id="chartsContainer"></div>
+        </div>
+
+        <!-- ABA HISTÓRICO / NOVO -->
+        <div id="tab-exams" class="hidden">
+            <div class="card">
+                <h3 id="examFormTitle">Novo Registro de Exame</h3>
+                <form id="examForm" class="form-row">
+                    <input type="hidden" id="edit_exam_id">
+                    <div class="form-group">
+                        <label>Data</label>
+                        <input type="date" id="exam_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Marcador</label>
+                        <select id="exam_marker" required>
+                            <option value="">Selecione...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Valor</label>
+                        <input type="number" step="0.01" id="exam_value" required>
+                    </div>
+                    <button type="submit" class="main" id="exam_submit">Salvar</button>
+                    <button type="button" class="secondary hidden" id="exam_cancel" onclick="cancelExamEdit()">Cancelar</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h3>Histórico de Registros</h3>
+                <div style="margin-bottom: 15px; padding: 10px; background: #f1f5f9; border-radius: 8px; display: flex; gap: 10px; align-items: center;">
+                    <label style="font-size: 0.85rem; font-weight: bold;">Importar CSV:</label>
+                    <input type="file" id="csvFile" accept=".csv" style="width: auto;">
+                    <button class="secondary" onclick="importCSV()">Subir Arquivo</button>
+                    <span style="font-size: 0.75rem; color: #64748b;">(Formato: data, marcador, valor)</span>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Marcador</th>
+                            <th>Valor</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="examTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ABA MARCADORES -->
+        <div id="tab-markers" class="hidden">
+            <div class="card">
+                <h3 id="markerFormTitle">Cadastrar Novo Marcador</h3>
+                <form id="markerForm" class="form-row">
+                    <div class="form-group">
+                        <label>Nome (ex: Vitamina D)</label>
+                        <input type="text" id="m_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Mínimo Ref.</label>
+                        <input type="number" step="0.01" id="m_min">
+                    </div>
+                    <div class="form-group">
+                        <label>Máximo Ref.</label>
+                        <input type="number" step="0.01" id="m_max">
+                    </div>
+                    <button type="submit" class="main" id="m_submit">Cadastrar</button>
+                    <button type="button" class="secondary hidden" id="m_cancel" onclick="cancelMarkerEdit()">Cancelar</button>
+                </form>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Mínimo</th>
+                            <th>Máximo</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="markerTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
+        
+        let markers = [];
+        let allExams = [];
+
+        function showTab(tab) {
+            ['dashboard', 'exams', 'markers'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
+                document.getElementById(`btn-${t}`).classList.toggle('active', t === tab);
+            });
+            if (tab === 'dashboard') loadExams();
+            if (tab === 'exams') loadExams();
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const [year, month, day] = dateStr.split('-');
+            return `${day}/${month}/${year}`;
+        }
+
+        async function loadMarkers() {
+            const res = await fetch('/api/markers');
+            markers = await res.json();
+            const select = document.getElementById('exam_marker');
+            select.innerHTML = '<option value="">Selecione...</option>' + 
+                markers.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+            
+            const tbody = document.getElementById('markerTableBody');
+            tbody.innerHTML = markers.map(m => `
+                <tr>
+                    <td><strong>${m.name}</strong></td>
+                    <td>${m.min_value ?? '-'}</td>
+                    <td>${m.max_value ?? '-'}</td>
+                    <td>
+                        <button class="secondary" onclick="editMarker('${m.name}', ${m.min_value}, ${m.max_value})">Editar</button>
+                        <button class="secondary" style="color: #ef4444" onclick="deleteMarker(${m.id})">Excluir</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadExams() {
+            const res = await fetch('/api/exams');
+            allExams = await res.json();
+            renderExamTable();
+            renderCharts();
+        }
+
+        function renderExamTable() {
+            const tbody = document.getElementById('examTableBody');
+            tbody.innerHTML = allExams.map(e => `
+                <tr>
+                    <td>${formatDate(e.date)}</td>
+                    <td>${e.marker_name}</td>
+                    <td>${e.value}</td>
+                    <td>
+                        <button class="secondary" onclick="editExam(${e.id}, '${e.date}', '${e.marker_name}', ${e.value})">Editar</button>
+                        <button class="secondary" style="color: #ef4444" onclick="deleteExam(${e.id})">Excluir</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function editExam(id, date, marker, value) {
+            document.getElementById('edit_exam_id').value = id;
+            document.getElementById('exam_date').value = date;
+            document.getElementById('exam_marker').value = marker;
+            document.getElementById('exam_value').value = value;
+            document.getElementById('examFormTitle').innerText = 'Editar Registro';
+            document.getElementById('exam_submit').innerText = 'Atualizar';
+            document.getElementById('exam_cancel').classList.remove('hidden');
+            window.scrollTo(0, 0);
+        }
+
+        function cancelExamEdit() {
+            document.getElementById('examForm').reset();
+            document.getElementById('edit_exam_id').value = '';
+            document.getElementById('examFormTitle').innerText = 'Novo Registro de Exame';
+            document.getElementById('exam_submit').innerText = 'Salvar';
+            document.getElementById('exam_cancel').classList.add('hidden');
+        }
+
+        async function deleteExam(id) {
+            if (confirm('Deseja excluir este registro?')) {
+                await fetch(`/api/exams/${id}`, { method: 'DELETE' });
+                loadExams();
+            }
+        }
+
+        function editMarker(name, min, max) {
+            document.getElementById('m_name').value = name;
+            document.getElementById('m_name').readOnly = true;
+            document.getElementById('m_min').value = min;
+            document.getElementById('m_max').value = max;
+            document.getElementById('markerFormTitle').innerText = 'Editar Marcador';
+            document.getElementById('m_submit').innerText = 'Atualizar';
+            document.getElementById('m_cancel').classList.remove('hidden');
+            window.scrollTo(0, 0);
+        }
+
+        function cancelMarkerEdit() {
+            document.getElementById('markerForm').reset();
+            document.getElementById('m_name').readOnly = false;
+            document.getElementById('markerFormTitle').innerText = 'Cadastrar Novo Marcador';
+            document.getElementById('m_submit').innerText = 'Cadastrar';
+            document.getElementById('m_cancel').classList.add('hidden');
+        }
+
+        async function deleteMarker(id) {
+            if (confirm('Isso excluirá todos os exames deste marcador. Continuar?')) {
+                await fetch(`/api/markers/${id}`, { method: 'DELETE' });
+                loadMarkers();
+                loadExams();
+            }
+        }
+
+        async function importCSV() {
+            const fileInput = document.getElementById('csvFile');
+            if (!fileInput.files.length) return alert('Selecione um arquivo CSV primeiro.');
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const res = await fetch('/api/import-csv', { method: 'POST', body: formData });
+            const result = await res.json();
+            
+            if (res.ok) {
+                alert(`Sucesso! ${result.imported} registros importados.`);
+                loadMarkers().then(loadExams);
+                fileInput.value = '';
+            } else {
+                alert('Erro na importação: ' + result.detail);
+            }
+        }
+
+        document.getElementById('markerForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const data = {
+                name: document.getElementById('m_name').value,
+                min_value: parseFloat(document.getElementById('m_min').value) || null,
+                max_value: parseFloat(document.getElementById('m_max').value) || null
+            };
+            await fetch('/api/markers', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+            cancelMarkerEdit();
+            loadMarkers();
+        };
+
+        document.getElementById('examForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('edit_exam_id').value;
+            const data = {
+                date: document.getElementById('exam_date').value,
+                marker_name: document.getElementById('exam_marker').value,
+                value: parseFloat(document.getElementById('exam_value').value)
+            };
+            
+            const url = id ? `/api/exams/${id}` : '/api/exams';
+            const method = id ? 'PUT' : 'POST';
+
+            await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+            cancelExamEdit();
+            loadExams();
+        };
+
+        function renderCharts() {
+            const container = document.getElementById('chartsContainer');
+            container.innerHTML = '';
+            
+            // Reordenar exames para o gráfico (pela data crescente)
+            const sortedExams = [...allExams].sort((a, b) => a.date.localeCompare(b.date));
+            const grouped = sortedExams.reduce((acc, curr) => {
+                if (!acc[curr.marker_name]) acc[curr.marker_name] = [];
+                acc[curr.marker_name].push(curr);
+                return acc;
+            }, {});
+
+            for (const [markerName, records] of Object.entries(grouped)) {
+                const markerInfo = markers.find(m => m.name === markerName);
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `<h3>${markerName}</h3><canvas id="chart-${markerName}"></canvas>`;
+                container.appendChild(card);
+
+                const annotations = {};
+                if (markerInfo && markerInfo.min_value !== null && markerInfo.max_value !== null) {
+                    annotations.refBox = { type: 'box', yMin: markerInfo.min_value, yMax: markerInfo.max_value, backgroundColor: 'rgba(34, 197, 94, 0.15)', borderWidth: 0, label: { content: 'Normal', display: true, position: 'start', font: { size: 10 } } };
+                    annotations.lowBox = { type: 'box', yMin: 0, yMax: markerInfo.min_value, backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 0 };
+                    annotations.highBox = { type: 'box', yMin: markerInfo.max_value, yMax: 999999, backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 0 };
+                }
+
+                new Chart(document.getElementById(`chart-${markerName}`).getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: records.map(r => formatDate(r.date)),
+                        datasets: [{ label: markerName, data: records.map(r => r.value), borderColor: '#2563eb', tension: 0.3, fill: false }]
+                    },
+                    options: { 
+                        plugins: { annotation: { annotations } },
+                        scales: { y: { suggestedMax: Math.max(...records.map(r => r.value), markerInfo?.max_value || 0) * 1.2, beginAtZero: false } }
+                    }
+                });
+            }
+        }
+
+        loadMarkers().then(loadExams);
+    </script>
+</body>
+</html>
