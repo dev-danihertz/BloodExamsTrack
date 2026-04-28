@@ -70,7 +70,8 @@
                 <div style="margin-bottom: 15px; padding: 10px; background: #f1f5f9; border-radius: 8px; display: flex; gap: 10px; align-items: center;">
                     <label style="font-size: 0.85rem; font-weight: bold;">Importar CSV:</label>
                     <input type="file" id="csvFile" accept=".csv" style="width: auto;">
-                    <button class="secondary" onclick="importCSV()">Subir Arquivo</button>
+                    <button id="btnImportCSV" class="secondary" onclick="importCSV()">Subir Arquivo</button>
+                    <span id="importLoading" class="hidden" style="font-size: 0.85rem; color: var(--primary); font-weight: bold;">⌛ Carregando...</span>
                     <span style="font-size: 0.75rem; color: #64748b;">(Formato: data, marcador, valor)</span>
                 </div>
                 <table>
@@ -122,6 +123,8 @@
             </div>
         </div>
     </div>
+
+    <button onclick="dangerResetDB()" style="position: fixed; bottom: 10px; right: 10px; background: none; border: none; color: #cbd5e1; font-size: 0.6rem; cursor: pointer; text-decoration: underline;">Limpar Tudo</button>
 
     <script>
         if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
@@ -242,20 +245,36 @@
 
         async function importCSV() {
             const fileInput = document.getElementById('csvFile');
+            const btnImport = document.getElementById('btnImportCSV');
+            const loadingSpan = document.getElementById('importLoading');
+
             if (!fileInput.files.length) return alert('Selecione um arquivo CSV primeiro.');
             
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
 
-            const res = await fetch('/api/import-csv', { method: 'POST', body: formData });
-            const result = await res.json();
-            
-            if (res.ok) {
-                alert(`Sucesso! ${result.imported} registros importados.`);
-                loadMarkers().then(loadExams);
-                fileInput.value = '';
-            } else {
-                alert('Erro na importação: ' + result.detail);
+            // Mostrar loading e desabilitar botão
+            btnImport.disabled = true;
+            loadingSpan.classList.remove('hidden');
+
+            try {
+                const res = await fetch('/api/import-csv', { method: 'POST', body: formData });
+                const result = await res.json();
+                
+                if (res.ok) {
+                    alert(`Sucesso! ${result.imported} registros importados.`);
+                    await loadMarkers();
+                    await loadExams();
+                    fileInput.value = '';
+                } else {
+                    alert('Erro na importação: ' + result.detail);
+                }
+            } catch (error) {
+                alert('Erro na conexão com o servidor.');
+            } finally {
+                // Esconder loading e reabilitar botão
+                btnImport.disabled = false;
+                loadingSpan.classList.add('hidden');
             }
         }
 
@@ -325,6 +344,18 @@
                         scales: { y: { suggestedMax: Math.max(...records.map(r => r.value), markerInfo?.max_value || 0) * 1.2, beginAtZero: false } }
                     }
                 });
+            }
+        }
+
+        async function dangerResetDB() {
+            if (confirm('ATENÇÃO: Isso apagará TODOS os dados permanentemente. Continuar?')) {
+                const res = await fetch('/api/danger-reset-db', { method: 'DELETE' });
+                if (res.ok) {
+                    alert('Banco de dados resetado com sucesso.');
+                    window.location.reload();
+                } else {
+                    alert('Erro ao resetar banco.');
+                }
             }
         }
 

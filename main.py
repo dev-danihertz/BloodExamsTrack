@@ -2,15 +2,25 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import List, Optional
 import database as db
 from pydantic import BaseModel
 import pandas as pd
 import io
+import logging
+
+# Configura logs para vermos no 'fly logs'
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Inicializa o banco
+db.init_db()
 
 app = FastAPI()
+DEFAULT_USER_ID = "01"
 
-# Pydantic Models
+# Pydantic Models mais flexíveis para evitar Erro 500
 class MarkerBase(BaseModel):
     name: str
     min_value: Optional[float] = None
@@ -25,8 +35,12 @@ class ExamCreate(BaseModel):
     marker_name: str
     value: float
 
-class ExamResponse(ExamCreate):
+class ExamResponse(BaseModel):
     id: int
+    date: Optional[str] = None
+    marker_name: Optional[str] = None
+    value: Optional[float] = None
+    user_id: Optional[str] = None
     class Config: from_attributes = True
 
 # DB Dependency
@@ -37,7 +51,6 @@ def get_db():
     finally:
         database.close()
 
-# Marker Endpoints
 @app.get("/api/markers", response_model=List[MarkerResponse])
 def get_markers(session: Session = Depends(get_db)):
     return session.query(db.Marker).all()
@@ -63,19 +76,36 @@ def delete_marker(marker_id: int, session: Session = Depends(get_db)):
         session.commit()
     return {"status": "ok"}
 
-# Exam Endpoints
 @app.get("/api/exams", response_model=List[ExamResponse])
 def get_exams(session: Session = Depends(get_db)):
-    return session.query(db.ExamRecord).order_by(db.ExamRecord.date.desc()).all()
+    # Traz todos os exames para diagnosticar o que há no banco
+    exams = session.query(db.ExamRecord).order_by(db.ExamRecord.date.desc()).all()
+    logger.info(f"Total de exames encontrados no banco: {len(exams)}")
+    return exams
 
 @app.post("/api/exams", response_model=ExamResponse)
 def create_exam(exam: ExamCreate, session: Session = Depends(get_db)):
     marker = session.query(db.Marker).filter(db.Marker.name == exam.marker_name).first()
     if not marker:
         raise HTTPException(status_code=404, detail="Marcador não cadastrado")
-    db_exam = db.ExamRecord(**exam.dict())
+    
+    db_exam = db.ExamRecord(
+        date=exam.date,
+        marker_name=exam.marker_name,
+        value=exam.value,
+        user_id=DEFAULT_USER_ID
+    )
     session.add(db_exam)
-    session.commit()
+    try:
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Erro ao salvar exame: {e}")
+        # Tenta sem user_id como último recurso
+        db_exam.user_id = None
+        session.add(db_exam)
+        session.commit()
+        
     session.refresh(db_exam)
     return db_exam
 
@@ -98,11 +128,14 @@ def delete_exam(exam_id: int, session: Session = Depends(get_db)):
         session.commit()
     return {"status": "ok"}
 
-# CSV Import
 @app.post("/api/import-csv")
 async def import_csv(file: UploadFile = File(...), session: Session = Depends(get_db)):
     content = await file.read()
-    df = pd.read_csv(io.BytesIO(content))
+    try:
+        df = pd.read_csv(io.BytesIO(content))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro ao ler CSV: {e}")
+
     required_columns = ['data', 'marcador', 'valor']
     if not all(col in df.columns for col in required_columns):
         raise HTTPException(status_code=400, detail="Colunas do CSV devem ser: data, marcador, valor")
@@ -115,19 +148,32 @@ async def import_csv(file: UploadFile = File(...), session: Session = Depends(ge
             marker = db.Marker(name=marker_name)
             session.add(marker)
             session.commit()
-            session.refresh(marker)
         
         new_record = db.ExamRecord(
             date=str(row['data']).strip(),
             marker_name=marker_name,
-            value=float(row['valor'])
+            value=float(row['valor']),
+            user_id=DEFAULT_USER_ID
         )
         session.add(new_record)
         count += 1
-    session.commit()
+    
+    try:
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Erro no commit do CSV: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao salvar dados no banco")
+        
     return {"status": "ok", "imported": count}
 
-# Serve static files
+@app.delete("/api/danger-reset-db")
+def reset_db(session: Session = Depends(get_db)):
+    db.Base.metadata.drop_all(bind=db.engine)
+    db.Base.metadata.create_all(bind=db.engine)
+    db.init_db()
+    return {"status": "banco resetado"}
+
 @app.get("/")
 def read_index():
     return FileResponse("static/index.html")
