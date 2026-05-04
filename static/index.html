@@ -6,6 +6,7 @@
     <title>BloodExamsTrack</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
     <style>
         :root { --primary: #2563eb; --bg: #f8fafc; }
         body { font-family: system-ui; background: var(--bg); margin: 0; padding: 20px; }
@@ -27,6 +28,7 @@
         .chart-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         .chart-content.collapsed { display: none; }
         .controls-row { display: flex; gap: 10px; margin-bottom: 15px; }
+        .duplicate-highlight { background-color: #fef9c3 !important; border-left: 4px solid #facc15; }
     </style>
 </head>
 <body>
@@ -78,15 +80,41 @@
                         <button id="btnImportCSV" class="secondary" onclick="importCSV()">Subir Arquivo</button>
                     </div>
                     <div style="margin-left: auto; display: flex; gap: 10px;">
-                        <button onclick="deduplicateExams()" class="secondary" style="background: #fff7ed; border-color: #ffedd5;">🧹 Limpar Duplicados</button>
+                        <button onclick="toggleFilter()" class="secondary" style="background: #eff6ff; border-color: #bfdbfe;">🔍 Filtrar</button>
                         <button onclick="downloadBackup('json')" class="secondary" style="background: #e0f2fe; border-color: #bae6fd;">💾 Backup (JSON)</button>
                         <button onclick="downloadBackup('csv')" class="secondary" style="background: #f0fdf4; border-color: #bbf7d0;">📊 Planilha (CSV)</button>
                     </div>
                     <span id="importLoading" class="hidden" style="font-size: 0.85rem; color: var(--primary); font-weight: bold; width: 100%;">⌛ Carregando...</span>
                 </div>
+
+                <!-- SEÇÃO DE FILTRO (OCULTA POR PADRÃO) -->
+                <div id="filterSection" class="hidden" style="margin-bottom: 15px; padding: 15px; background: white; border: 1px solid #e2e8f0; border-radius: 8px;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Data Inicial</label>
+                            <input type="date" id="filter_start" value="2000-01-01">
+                        </div>
+                        <div class="form-group">
+                            <label>Data Final</label>
+                            <input type="date" id="filter_end">
+                        </div>
+                        <div class="form-group">
+                            <label>Marcador</label>
+                            <select id="filter_marker">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; gap: 5px;">
+                            <button onclick="applyFilters()" class="main" style="margin:0">Aplicar</button>
+                            <button onclick="clearFilters()" class="secondary">Limpar</button>
+                        </div>
+                    </div>
+                </div>
+
                 <table>
                     <thead>
                         <tr>
+                            <th style="width: 30px;"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
                             <th onclick="sortExams('date')">Data <span id="sort-date"></span></th>
                             <th onclick="sortExams('marker_name')">Marcador <span id="sort-marker_name"></span></th>
                             <th onclick="sortExams('value')">Valor <span id="sort-value"></span></th>
@@ -95,6 +123,18 @@
                     </thead>
                     <tbody id="examTableBody"></tbody>
                 </table>
+
+                <!-- AÇÕES EM MASSA (AGORA ABAIXO DA TABELA) -->
+                <div id="bulkActions" class="hidden" style="margin-top: 15px; padding: 10px; background: #fefce8; border: 1px solid #fef08a; border-radius: 8px; display: flex; gap: 10px; align-items: center;">
+                    <span style="font-size: 0.85rem; font-weight: bold;">Com selecionados:</span>
+                    <select id="bulk_new_marker" style="font-size: 0.85rem; padding: 4px;">
+                        <option value="">Alterar Marcador para...</option>
+                    </select>
+                    <button onclick="bulkEditMarker()" class="secondary" style="background: var(--primary); color: white; border: none;">Alterar Marcador</button>
+                    <button onclick="clearSelection()" class="secondary">Cancelar</button>
+                </div>
+            </div>
+        </div>
             </div>
         </div>
 
@@ -138,10 +178,76 @@
 
     <script>
         if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
-        
+        Chart.register(ChartDataLabels);
         let markers = [];
         let allExams = [];
+        let filteredExams = [];
         let sortConfig = { column: 'date', direction: 'desc' };
+        let activeFilters = { start: '', end: '', marker: '' };
+
+        function toggleFilter() {
+            document.getElementById('filterSection').classList.toggle('hidden');
+        }
+
+        function applyFilters() {
+            activeFilters.start = document.getElementById('filter_start').value;
+            activeFilters.end = document.getElementById('filter_end').value;
+            activeFilters.marker = document.getElementById('filter_marker').value;
+            renderExamTable();
+        }
+
+        function clearFilters() {
+            document.getElementById('filter_start').value = '2000-01-01';
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('filter_end').value = today;
+            document.getElementById('filter_marker').value = '';
+            activeFilters = { start: '2000-01-01', end: today, marker: '' };
+            renderExamTable();
+        }
+
+        function toggleSelectAll() {
+            const isChecked = document.getElementById('selectAll').checked;
+            document.querySelectorAll('.exam-checkbox').forEach(cb => {
+                cb.checked = isChecked;
+            });
+            updateBulkActionsVisibility();
+        }
+
+        function updateBulkActionsVisibility() {
+            const selected = document.querySelectorAll('.exam-checkbox:checked').length;
+            document.getElementById('bulkActions').classList.toggle('hidden', selected === 0);
+        }
+
+        function clearSelection() {
+            document.getElementById('selectAll').checked = false;
+            document.querySelectorAll('.exam-checkbox').forEach(cb => cb.checked = false);
+            updateBulkActionsVisibility();
+        }
+
+        async function bulkEditMarker() {
+            const newMarker = document.getElementById('bulk_new_marker').value;
+            if (!newMarker) return alert('Selecione o marcador de destino');
+            
+            const selectedIds = Array.from(document.querySelectorAll('.exam-checkbox:checked'))
+                .map(cb => parseInt(cb.value));
+            
+            if (!confirm(`Deseja alterar o marcador de ${selectedIds.length} registros para ${newMarker}?`)) return;
+
+            const res = await fetch('/api/exams/bulk-update-marker', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ exam_ids: selectedIds, new_marker_name: newMarker })
+            });
+
+            if (res.ok) {
+                alert('Atualização concluída com sucesso!');
+                clearSelection();
+                loadExams();
+            } else {
+                const err = await res.json();
+                alert('Erro: ' + (err.detail || 'Falha na atualização'));
+            }
+        }
 
         function sortExams(column) {
             if (sortConfig.column === column) {
@@ -186,9 +292,13 @@
         async function loadMarkers() {
             const res = await fetch('/api/markers');
             markers = await res.json();
-            const select = document.getElementById('exam_marker');
-            select.innerHTML = '<option value="">Selecione...</option>' + 
-                markers.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+            
+            // Preenche todos os seletores de marcadores
+            const markerOptions = markers.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+            
+            document.getElementById('exam_marker').innerHTML = '<option value="">Selecione...</option>' + markerOptions;
+            document.getElementById('filter_marker').innerHTML = '<option value="">Todos</option>' + markerOptions;
+            document.getElementById('bulk_new_marker').innerHTML = '<option value="">Alterar Marcador para...</option>' + markerOptions;
             
             const tbody = document.getElementById('markerTableBody');
             tbody.innerHTML = markers.map(m => `
@@ -208,7 +318,6 @@
             const res = await fetch('/api/exams');
             allExams = await res.json();
             
-            // Re-aplicar ordenação se não for a padrão do banco (date desc)
             if (sortConfig.column !== 'date' || sortConfig.direction !== 'desc') {
                 const col = sortConfig.column;
                 const dir = sortConfig.direction;
@@ -227,6 +336,21 @@
         }
 
         function renderExamTable() {
+            // Aplicar Filtros
+            filteredExams = allExams.filter(e => {
+                const matchStart = !activeFilters.start || e.date >= activeFilters.start;
+                const matchEnd = !activeFilters.end || e.date <= activeFilters.end;
+                const matchMarker = !activeFilters.marker || e.marker_name === activeFilters.marker;
+                return matchStart && matchEnd && matchMarker;
+            });
+
+            // Identificar duplicatas visíveis para destaque
+            const counts = {};
+            filteredExams.forEach(e => {
+                const key = `${e.date}|${e.marker_name}|${e.value}`;
+                counts[key] = (counts[key] || 0) + 1;
+            });
+
             // Atualiza indicadores visuais nos cabeçalhos
             ['date', 'marker_name', 'value'].forEach(col => {
                 const el = document.getElementById(`sort-${col}`);
@@ -236,17 +360,26 @@
             });
 
             const tbody = document.getElementById('examTableBody');
-            tbody.innerHTML = allExams.map(e => `
-                <tr>
-                    <td>${formatDate(e.date)}</td>
-                    <td>${e.marker_name}</td>
-                    <td>${e.value}</td>
-                    <td>
-                        <button class="secondary" onclick="editExam(${e.id}, '${e.date}', '${e.marker_name}', ${e.value})">Editar</button>
-                        <button class="secondary" style="color: #ef4444" onclick="deleteExam(${e.id})">Excluir</button>
-                    </td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = filteredExams.map(e => {
+                const key = `${e.date}|${e.marker_name}|${e.value}`;
+                const isDuplicate = counts[key] > 1;
+                return `
+                    <tr class="${isDuplicate ? 'duplicate-highlight' : ''}">
+                        <td><input type="checkbox" class="exam-checkbox" value="${e.id}" onchange="updateBulkActionsVisibility()"></td>
+                        <td>${formatDate(e.date)}</td>
+                        <td>${e.marker_name}</td>
+                        <td>${e.value}</td>
+                        <td>
+                            <button class="secondary" onclick="editExam(${e.id}, '${e.date}', '${e.marker_name}', ${e.value})">Editar</button>
+                            <button class="secondary" style="color: #ef4444" onclick="deleteExam(${e.id})">Excluir</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            // Resetar "Selecionar Todos"
+            document.getElementById('selectAll').checked = false;
+            updateBulkActionsVisibility();
         }
 
         function editExam(id, date, marker, value) {
@@ -348,19 +481,6 @@
             window.location.href = url;
         }
 
-        async function deduplicateExams() {
-            if (confirm('Deseja buscar e remover registros idênticos (mesma data, marcador e valor)?')) {
-                const res = await fetch('/api/exams/deduplicate', { method: 'POST' });
-                const result = await res.json();
-                if (res.ok) {
-                    alert(`Limpeza concluída! ${result.deleted_count} registros duplicados foram removidos.`);
-                    loadExams();
-                } else {
-                    alert('Erro ao processar limpeza.');
-                }
-            }
-        }
-
         document.getElementById('markerForm').onsubmit = async (e) => {
             e.preventDefault();
             const data = {
@@ -419,6 +539,46 @@
                 </div>
             `;
             
+            const translations = {
+                'VITAMINA D': 'Vitamin D',
+                'GLICOSE': 'Glucose',
+                'GLICOSE EM JEJUM': 'Fasting Glucose',
+                'GLICOSE JEJUM': 'Fasting Glucose',
+                'COLESTEROL TOTAL': 'Total Cholesterol',
+                'HDL': 'HDL Cholesterol',
+                'COLESTEROL HDL': 'HDL Cholesterol',
+                'HDL COLESTEROL': 'HDL Cholesterol',
+                'LDL': 'LDL Cholesterol',
+                'COLESTEROL LDL': 'LDL Cholesterol',
+                'LDL COLESTEROL': 'LDL Cholesterol',
+                'TRIGLICÉRIDES': 'Triglycerides',
+                'HEMOGLOBINA GLICADA': 'HbA1c',
+                'FERRITINA': 'Ferritin',
+                'TSH': 'TSH',
+                'T4 LIVRE': 'Free T4',
+                'B12': 'Vitamin B12',
+                'ÁCIDO ÚRICO': 'Uric Acid',
+                'CREATININA': 'Creatinine',
+                'URÉIA': 'Urea',
+                'FERRO': 'Iron',
+                'HEMOGRAMA': 'Full Blood Count',
+                'MAGNÉSIO': 'Magnesium',
+                'POTÁSSIO': 'Potassium',
+                'SÓDIO': 'Sodium',
+                'CÁLCIO': 'Calcium',
+                'INSULINA': 'Insulin',
+                'PROTEÍNA C REATIVA': 'C-Reactive Protein (CRP)',
+                'ÁCIDO FÓLICO': 'Folate',
+                'COLESTEROL NÃO-HDL': 'Non-HDL Cholesterol',
+                'COLESTEROL NAO-HDL': 'Non-HDL Cholesterol',
+                'COLESTEROL NÃO HDL': 'Non-HDL Cholesterol',
+                'COLESTEROL NAO HDL': 'Non-HDL Cholesterol',
+                'NÃO-HDL': 'Non-HDL Cholesterol',
+                'NAO-HDL': 'Non-HDL Cholesterol',
+                'NÃO HDL': 'Non-HDL Cholesterol',
+                'NAO HDL': 'Non-HDL Cholesterol'
+            };
+
             const sortedExams = [...allExams].sort((a, b) => a.date.localeCompare(b.date));
             const grouped = sortedExams.reduce((acc, curr) => {
                 if (!acc[curr.marker_name]) acc[curr.marker_name] = [];
@@ -431,11 +591,16 @@
             for (const markerName of sortedMarkerNames) {
                 const records = grouped[markerName];
                 const markerInfo = markers.find(m => m.name === markerName);
+                
+                // Busca a tradução usando o nome limpo e em maiúsculas
+                const cleanName = markerName.trim().toUpperCase();
+                const englishName = translations[cleanName] ? ` (${translations[cleanName]})` : '';
+                
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.innerHTML = `
                     <div class="chart-header" onclick="toggleChart('${markerName}')">
-                        <h3 style="margin:0">${markerName}</h3>
+                        <h3 style="margin:0">${markerName}${englishName}</h3>
                         <span id="icon-${markerName}" style="font-size: 1.2rem;">➖</span>
                     </div>
                     <div id="content-${markerName}" class="chart-content">
@@ -455,10 +620,28 @@
                     type: 'line',
                     data: {
                         labels: records.map(r => formatDate(r.date)),
-                        datasets: [{ label: markerName, data: records.map(r => r.value), borderColor: '#2563eb', tension: 0.3, fill: false }]
+                        datasets: [{ 
+                            label: markerName, 
+                            data: records.map(r => r.value), 
+                            borderColor: '#2563eb', 
+                            tension: 0.3, 
+                            fill: false,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#2563eb'
+                        }]
                     },
                     options: { 
-                        plugins: { annotation: { annotations } },
+                        plugins: { 
+                            annotation: { annotations },
+                            datalabels: {
+                                align: 'bottom',
+                                anchor: 'center',
+                                offset: 6,
+                                color: '#475569',
+                                font: { size: 10, weight: 'bold' }
+                            }
+                        },
+                        layout: { padding: { top: 10, bottom: 20 } },
                         scales: { y: { suggestedMax: Math.max(...records.map(r => r.value), markerInfo?.max_value || 0) * 1.2, beginAtZero: false } }
                     }
                 });
@@ -477,6 +660,14 @@
             }
         }
 
+        function initDates() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('filter_end').value = today;
+            activeFilters.start = '2000-01-01';
+            activeFilters.end = today;
+        }
+
+        initDates();
         loadMarkers().then(loadExams);
     </script>
 </body>

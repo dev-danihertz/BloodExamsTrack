@@ -43,6 +43,10 @@ class ExamResponse(BaseModel):
     user_id: Optional[str] = None
     class Config: from_attributes = True
 
+class BulkUpdateMarker(BaseModel):
+    exam_ids: List[int]
+    new_marker_name: str
+
 # DB Dependency
 def get_db():
     database = db.SessionLocal()
@@ -129,6 +133,19 @@ def delete_exam(exam_id: int, session: Session = Depends(get_db)):
         session.delete(db_exam)
         session.commit()
     return {"status": "ok"}
+
+@app.post("/api/exams/bulk-update-marker")
+def bulk_update_marker(data: BulkUpdateMarker, session: Session = Depends(get_db)):
+    new_marker = session.query(db.Marker).filter(db.Marker.name == data.new_marker_name.upper()).first()
+    if not new_marker:
+        raise HTTPException(status_code=404, detail="Marcador de destino não encontrado")
+    
+    session.query(db.ExamRecord).filter(db.ExamRecord.id.in_(data.exam_ids)).update(
+        {db.ExamRecord.marker_name: data.new_marker_name.upper()},
+        synchronize_session=False
+    )
+    session.commit()
+    return {"status": "ok", "updated_count": len(data.exam_ids)}
 
 @app.post("/api/import-csv")
 async def import_csv(file: UploadFile = File(...), session: Session = Depends(get_db)):
@@ -217,60 +234,6 @@ async def import_json(file: UploadFile = File(...), session: Session = Depends(g
         session.commit()
 
     return {"status": "ok", "markers_imported": markers_count, "exams_imported": exams_count}
-
-@app.post("/api/exams/deduplicate")
-def deduplicate_exams(session: Session = Depends(get_db)):
-    # 1. Obter todos os marcadores para fundi-los por nome (case-insensitive)
-    markers = session.query(db.Marker).all()
-    marker_map = {} # nome_upper -> marcador_principal
-    markers_to_delete = []
-    
-    for m in markers:
-        name_upper = m.name.strip().upper()
-        if name_upper in marker_map:
-            # Já temos um marcador com esse nome. 
-            # Vamos mover as informações de min/max se o atual for nulo
-            principal = marker_map[name_upper]
-            if principal.min_value is None: principal.min_value = m.min_value
-            if principal.max_value is None: principal.max_value = m.max_value
-            markers_to_delete.append(m)
-        else:
-            m.name = name_upper # Padroniza o nome do principal
-            marker_map[name_upper] = m
-    
-    session.commit() # Salva as renomeações dos principais
-
-    # 2. Atualizar todos os exames para usar os nomes padronizados (em maiúsculas)
-    exams = session.query(db.ExamRecord).all()
-    for e in exams:
-        e.marker_name = e.marker_name.strip().upper()
-    
-    session.commit()
-
-    # 3. Excluir os marcadores duplicados que sobraram
-    for m in markers_to_delete:
-        session.delete(m)
-    session.commit()
-
-    # 4. Agora sim, remover exames duplicados (mesma data, marcador e valor)
-    all_exams = session.query(db.ExamRecord).all()
-    seen = set()
-    to_delete_ids = []
-    
-    for exam in all_exams:
-        identifier = (exam.date, exam.marker_name, exam.value)
-        if identifier in seen:
-            to_delete_ids.append(exam.id)
-        else:
-            seen.add(identifier)
-    
-    deleted_count = 0
-    if to_delete_ids:
-        session.query(db.ExamRecord).filter(db.ExamRecord.id.in_(to_delete_ids)).delete(synchronize_session=False)
-        session.commit()
-        deleted_count = len(to_delete_ids)
-        
-    return {"status": "ok", "deleted_count": deleted_count}
 
 @app.delete("/api/danger-reset-db")
 def reset_db(session: Session = Depends(get_db)):
