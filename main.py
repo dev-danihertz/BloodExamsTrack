@@ -57,12 +57,13 @@ def get_markers(session: Session = Depends(get_db)):
 
 @app.post("/api/markers", response_model=MarkerResponse)
 def create_marker(marker: MarkerBase, session: Session = Depends(get_db)):
-    db_marker = session.query(db.Marker).filter(db.Marker.name == marker.name).first()
+    name_upper = marker.name.strip().upper()
+    db_marker = session.query(db.Marker).filter(db.Marker.name == name_upper).first()
     if db_marker:
         db_marker.min_value = marker.min_value
         db_marker.max_value = marker.max_value
     else:
-        db_marker = db.Marker(**marker.dict())
+        db_marker = db.Marker(name=name_upper, min_value=marker.min_value, max_value=marker.max_value)
         session.add(db_marker)
     session.commit()
     session.refresh(db_marker)
@@ -85,13 +86,14 @@ def get_exams(session: Session = Depends(get_db)):
 
 @app.post("/api/exams", response_model=ExamResponse)
 def create_exam(exam: ExamCreate, session: Session = Depends(get_db)):
-    marker = session.query(db.Marker).filter(db.Marker.name == exam.marker_name).first()
+    marker_name_upper = exam.marker_name.strip().upper()
+    marker = session.query(db.Marker).filter(db.Marker.name == marker_name_upper).first()
     if not marker:
         raise HTTPException(status_code=404, detail="Marcador não cadastrado")
     
     db_exam = db.ExamRecord(
         date=exam.date,
-        marker_name=exam.marker_name,
+        marker_name=marker_name_upper,
         value=exam.value,
         user_id=DEFAULT_USER_ID
     )
@@ -142,7 +144,7 @@ async def import_csv(file: UploadFile = File(...), session: Session = Depends(ge
     
     count = 0
     for _, row in df.iterrows():
-        marker_name = str(row['marcador']).strip()
+        marker_name = str(row['marcador']).strip().upper()
         marker = session.query(db.Marker).filter(db.Marker.name == marker_name).first()
         if not marker:
             marker = db.Marker(name=marker_name)
@@ -180,12 +182,13 @@ async def import_json(file: UploadFile = File(...), session: Session = Depends(g
     markers_count = 0
     if "markers" in data:
         for m in data["markers"]:
-            db_marker = session.query(db.Marker).filter(db.Marker.name == m["name"]).first()
+            name_upper = m["name"].strip().upper()
+            db_marker = session.query(db.Marker).filter(db.Marker.name == name_upper).first()
             if db_marker:
                 db_marker.min_value = m.get("min_value")
                 db_marker.max_value = m.get("max_value")
             else:
-                db_marker = db.Marker(name=m["name"], min_value=m.get("min_value"), max_value=m.get("max_value"))
+                db_marker = db.Marker(name=name_upper, min_value=m.get("min_value"), max_value=m.get("max_value"))
                 session.add(db_marker)
             markers_count += 1
         session.commit()
@@ -194,17 +197,18 @@ async def import_json(file: UploadFile = File(...), session: Session = Depends(g
     exams_count = 0
     if "exams" in data:
         for e in data["exams"]:
+            marker_name_upper = e["marker_name"].strip().upper()
             # Verifica se já existe um registro idêntico para evitar duplicatas simples
             exists = session.query(db.ExamRecord).filter(
                 db.ExamRecord.date == e["date"],
-                db.ExamRecord.marker_name == e["marker_name"],
+                db.ExamRecord.marker_name == marker_name_upper,
                 db.ExamRecord.value == e["value"]
             ).first()
             
             if not exists:
                 new_exam = db.ExamRecord(
                     date=e["date"],
-                    marker_name=e["marker_name"],
+                    marker_name=marker_name_upper,
                     value=e["value"],
                     user_id=DEFAULT_USER_ID
                 )
@@ -216,13 +220,44 @@ async def import_json(file: UploadFile = File(...), session: Session = Depends(g
 
 @app.post("/api/exams/deduplicate")
 def deduplicate_exams(session: Session = Depends(get_db)):
-    # Busca todos os exames
+    # 1. Obter todos os marcadores para fundi-los por nome (case-insensitive)
+    markers = session.query(db.Marker).all()
+    marker_map = {} # nome_upper -> marcador_principal
+    markers_to_delete = []
+    
+    for m in markers:
+        name_upper = m.name.strip().upper()
+        if name_upper in marker_map:
+            # Já temos um marcador com esse nome. 
+            # Vamos mover as informações de min/max se o atual for nulo
+            principal = marker_map[name_upper]
+            if principal.min_value is None: principal.min_value = m.min_value
+            if principal.max_value is None: principal.max_value = m.max_value
+            markers_to_delete.append(m)
+        else:
+            m.name = name_upper # Padroniza o nome do principal
+            marker_map[name_upper] = m
+    
+    session.commit() # Salva as renomeações dos principais
+
+    # 2. Atualizar todos os exames para usar os nomes padronizados (em maiúsculas)
     exams = session.query(db.ExamRecord).all()
+    for e in exams:
+        e.marker_name = e.marker_name.strip().upper()
+    
+    session.commit()
+
+    # 3. Excluir os marcadores duplicados que sobraram
+    for m in markers_to_delete:
+        session.delete(m)
+    session.commit()
+
+    # 4. Agora sim, remover exames duplicados (mesma data, marcador e valor)
+    all_exams = session.query(db.ExamRecord).all()
     seen = set()
     to_delete_ids = []
     
-    for exam in exams:
-        # Define o que é um registro idêntico
+    for exam in all_exams:
         identifier = (exam.date, exam.marker_name, exam.value)
         if identifier in seen:
             to_delete_ids.append(exam.id)
