@@ -22,7 +22,8 @@
         .hidden { display: none; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { text-align: left; padding: 12px; border-bottom: 1px solid #f1f5f9; }
-        th { background: #f8fafc; color: #64748b; font-size: 0.85rem; }
+        th { background: #f8fafc; color: #64748b; font-size: 0.85rem; cursor: pointer; user-select: none; }
+        th:hover { background: #f1f5f9; color: var(--primary); }
     </style>
 </head>
 <body>
@@ -77,9 +78,9 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Data</th>
-                            <th>Marcador</th>
-                            <th>Valor</th>
+                            <th onclick="sortExams('date')">Data <span id="sort-date"></span></th>
+                            <th onclick="sortExams('marker_name')">Marcador <span id="sort-marker_name"></span></th>
+                            <th onclick="sortExams('value')">Valor <span id="sort-value"></span></th>
                             <th>Ações</th>
                         </tr>
                     </thead>
@@ -131,6 +132,32 @@
         
         let markers = [];
         let allExams = [];
+        let sortConfig = { column: 'date', direction: 'desc' };
+
+        function sortExams(column) {
+            if (sortConfig.column === column) {
+                sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortConfig.column = column;
+                sortConfig.direction = 'asc';
+            }
+            
+            allExams.sort((a, b) => {
+                let valA = a[column];
+                let valB = b[column];
+                
+                if (column === 'value') {
+                    valA = parseFloat(valA);
+                    valB = parseFloat(valB);
+                }
+                
+                if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            renderExamTable();
+        }
 
         function showTab(tab) {
             ['dashboard', 'exams', 'markers'].forEach(t => {
@@ -171,11 +198,34 @@
         async function loadExams() {
             const res = await fetch('/api/exams');
             allExams = await res.json();
+            
+            // Re-aplicar ordenação se não for a padrão do banco (date desc)
+            if (sortConfig.column !== 'date' || sortConfig.direction !== 'desc') {
+                const col = sortConfig.column;
+                const dir = sortConfig.direction;
+                allExams.sort((a, b) => {
+                    let valA = a[col];
+                    let valB = b[col];
+                    if (col === 'value') { valA = parseFloat(valA); valB = parseFloat(valB); }
+                    if (valA < valB) return dir === 'asc' ? -1 : 1;
+                    if (valA > valB) return dir === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            }
+
             renderExamTable();
             renderCharts();
         }
 
         function renderExamTable() {
+            // Atualiza indicadores visuais nos cabeçalhos
+            ['date', 'marker_name', 'value'].forEach(col => {
+                const el = document.getElementById(`sort-${col}`);
+                if (el) {
+                    el.innerText = sortConfig.column === col ? (sortConfig.direction === 'asc' ? ' 🔼' : ' 🔽') : '';
+                }
+            });
+
             const tbody = document.getElementById('examTableBody');
             tbody.innerHTML = allExams.map(e => `
                 <tr>
