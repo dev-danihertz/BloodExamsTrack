@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional
@@ -167,12 +167,113 @@ async def import_csv(file: UploadFile = File(...), session: Session = Depends(ge
         
     return {"status": "ok", "imported": count}
 
+@app.post("/api/import-json")
+async def import_json(file: UploadFile = File(...), session: Session = Depends(get_db)):
+    content = await file.read()
+    try:
+        import json
+        data = json.loads(content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro ao ler JSON: {e}")
+
+    # Importar Marcadores
+    markers_count = 0
+    if "markers" in data:
+        for m in data["markers"]:
+            db_marker = session.query(db.Marker).filter(db.Marker.name == m["name"]).first()
+            if db_marker:
+                db_marker.min_value = m.get("min_value")
+                db_marker.max_value = m.get("max_value")
+            else:
+                db_marker = db.Marker(name=m["name"], min_value=m.get("min_value"), max_value=m.get("max_value"))
+                session.add(db_marker)
+            markers_count += 1
+        session.commit()
+
+    # Importar Exames
+    exams_count = 0
+    if "exams" in data:
+        for e in data["exams"]:
+            # Verifica se já existe um registro idêntico para evitar duplicatas simples
+            exists = session.query(db.ExamRecord).filter(
+                db.ExamRecord.date == e["date"],
+                db.ExamRecord.marker_name == e["marker_name"],
+                db.ExamRecord.value == e["value"]
+            ).first()
+            
+            if not exists:
+                new_exam = db.ExamRecord(
+                    date=e["date"],
+                    marker_name=e["marker_name"],
+                    value=e["value"],
+                    user_id=DEFAULT_USER_ID
+                )
+                session.add(new_exam)
+                exams_count += 1
+        session.commit()
+
+    return {"status": "ok", "markers_imported": markers_count, "exams_imported": exams_count}
+
+@app.post("/api/exams/deduplicate")
+def deduplicate_exams(session: Session = Depends(get_db)):
+    # Busca todos os exames
+    exams = session.query(db.ExamRecord).all()
+    seen = set()
+    to_delete_ids = []
+    
+    for exam in exams:
+        # Define o que é um registro idêntico
+        identifier = (exam.date, exam.marker_name, exam.value)
+        if identifier in seen:
+            to_delete_ids.append(exam.id)
+        else:
+            seen.add(identifier)
+    
+    deleted_count = 0
+    if to_delete_ids:
+        session.query(db.ExamRecord).filter(db.ExamRecord.id.in_(to_delete_ids)).delete(synchronize_session=False)
+        session.commit()
+        deleted_count = len(to_delete_ids)
+        
+    return {"status": "ok", "deleted_count": deleted_count}
+
 @app.delete("/api/danger-reset-db")
 def reset_db(session: Session = Depends(get_db)):
     db.Base.metadata.drop_all(bind=db.engine)
     db.Base.metadata.create_all(bind=db.engine)
     db.init_db()
     return {"status": "banco resetado"}
+
+@app.get("/api/export-json")
+def export_json(session: Session = Depends(get_db)):
+    markers = session.query(db.Marker).all()
+    exams = session.query(db.ExamRecord).all()
+    
+    data = {
+        "markers": [{"name": m.name, "min_value": m.min_value, "max_value": m.max_value} for m in markers],
+        "exams": [{"date": e.date, "marker_name": e.marker_name, "value": e.value} for e in exams]
+    }
+    return JSONResponse(
+        content=data, 
+        headers={"Content-Disposition": "attachment; filename=blood_exams_backup.json"}
+    )
+
+@app.get("/api/export-csv")
+def export_csv(session: Session = Depends(get_db)):
+    exams = session.query(db.ExamRecord).all()
+    df = pd.DataFrame([
+        {"data": e.date, "marcador": e.marker_name, "valor": e.value} 
+        for e in exams
+    ])
+    
+    output = io.StringIO()
+    df.to_csv(output, index=False)
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=blood_exams.csv"}
+    )
 
 @app.get("/")
 def read_index():

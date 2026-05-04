@@ -24,6 +24,9 @@
         th, td { text-align: left; padding: 12px; border-bottom: 1px solid #f1f5f9; }
         th { background: #f8fafc; color: #64748b; font-size: 0.85rem; cursor: pointer; user-select: none; }
         th:hover { background: #f1f5f9; color: var(--primary); }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .chart-content.collapsed { display: none; }
+        .controls-row { display: flex; gap: 10px; margin-bottom: 15px; }
     </style>
 </head>
 <body>
@@ -68,12 +71,18 @@
 
             <div class="card">
                 <h3>Histórico de Registros</h3>
-                <div style="margin-bottom: 15px; padding: 10px; background: #f1f5f9; border-radius: 8px; display: flex; gap: 10px; align-items: center;">
-                    <label style="font-size: 0.85rem; font-weight: bold;">Importar CSV:</label>
-                    <input type="file" id="csvFile" accept=".csv" style="width: auto;">
-                    <button id="btnImportCSV" class="secondary" onclick="importCSV()">Subir Arquivo</button>
-                    <span id="importLoading" class="hidden" style="font-size: 0.85rem; color: var(--primary); font-weight: bold;">⌛ Carregando...</span>
-                    <span style="font-size: 0.75rem; color: #64748b;">(Formato: data, marcador, valor)</span>
+                <div style="margin-bottom: 15px; padding: 10px; background: #f1f5f9; border-radius: 8px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <label style="font-size: 0.85rem; font-weight: bold;">Importar CSV/JSON:</label>
+                        <input type="file" id="csvFile" accept=".csv,.json" style="width: auto;">
+                        <button id="btnImportCSV" class="secondary" onclick="importCSV()">Subir Arquivo</button>
+                    </div>
+                    <div style="margin-left: auto; display: flex; gap: 10px;">
+                        <button onclick="deduplicateExams()" class="secondary" style="background: #fff7ed; border-color: #ffedd5;">🧹 Limpar Duplicados</button>
+                        <button onclick="downloadBackup('json')" class="secondary" style="background: #e0f2fe; border-color: #bae6fd;">💾 Backup (JSON)</button>
+                        <button onclick="downloadBackup('csv')" class="secondary" style="background: #f0fdf4; border-color: #bbf7d0;">📊 Planilha (CSV)</button>
+                    </div>
+                    <span id="importLoading" class="hidden" style="font-size: 0.85rem; color: var(--primary); font-weight: bold; width: 100%;">⌛ Carregando...</span>
                 </div>
                 <table>
                     <thead>
@@ -298,21 +307,28 @@
             const btnImport = document.getElementById('btnImportCSV');
             const loadingSpan = document.getElementById('importLoading');
 
-            if (!fileInput.files.length) return alert('Selecione um arquivo CSV primeiro.');
+            if (!fileInput.files.length) return alert('Selecione um arquivo primeiro.');
+            
+            const file = fileInput.files[0];
+            const isJson = file.name.endsWith('.json');
+            const endpoint = isJson ? '/api/import-json' : '/api/import-csv';
             
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+            formData.append('file', file);
 
-            // Mostrar loading e desabilitar botão
             btnImport.disabled = true;
             loadingSpan.classList.remove('hidden');
 
             try {
-                const res = await fetch('/api/import-csv', { method: 'POST', body: formData });
+                const res = await fetch(endpoint, { method: 'POST', body: formData });
                 const result = await res.json();
                 
                 if (res.ok) {
-                    alert(`Sucesso! ${result.imported} registros importados.`);
+                    if (isJson) {
+                        alert(`Backup restaurado!\nMarcadores: ${result.markers_imported}\nExames: ${result.exams_imported}`);
+                    } else {
+                        alert(`Sucesso! ${result.imported} registros importados.`);
+                    }
                     await loadMarkers();
                     await loadExams();
                     fileInput.value = '';
@@ -322,9 +338,26 @@
             } catch (error) {
                 alert('Erro na conexão com o servidor.');
             } finally {
-                // Esconder loading e reabilitar botão
                 btnImport.disabled = false;
                 loadingSpan.classList.add('hidden');
+            }
+        }
+
+        function downloadBackup(format) {
+            const url = format === 'json' ? '/api/export-json' : '/api/export-csv';
+            window.location.href = url;
+        }
+
+        async function deduplicateExams() {
+            if (confirm('Deseja buscar e remover registros idênticos (mesma data, marcador e valor)?')) {
+                const res = await fetch('/api/exams/deduplicate', { method: 'POST' });
+                const result = await res.json();
+                if (res.ok) {
+                    alert(`Limpeza concluída! ${result.deleted_count} registros duplicados foram removidos.`);
+                    loadExams();
+                } else {
+                    alert('Erro ao processar limpeza.');
+                }
             }
         }
 
@@ -357,11 +390,35 @@
             loadExams();
         };
 
+        function toggleAllCharts(collapse) {
+            document.querySelectorAll('.chart-content').forEach(content => {
+                const markerName = content.id.replace('content-', '');
+                if (collapse) {
+                    content.classList.add('collapsed');
+                    document.getElementById(`icon-${markerName}`).innerText = '➕';
+                } else {
+                    content.classList.remove('collapsed');
+                    document.getElementById(`icon-${markerName}`).innerText = '➖';
+                }
+            });
+        }
+
+        function toggleChart(markerName) {
+            const content = document.getElementById(`content-${markerName}`);
+            const icon = document.getElementById(`icon-${markerName}`);
+            const isCollapsed = content.classList.toggle('collapsed');
+            icon.innerText = isCollapsed ? '➕' : '➖';
+        }
+
         function renderCharts() {
             const container = document.getElementById('chartsContainer');
-            container.innerHTML = '';
+            container.innerHTML = `
+                <div class="controls-row">
+                    <button class="secondary" onclick="toggleAllCharts(true)">📁 Minimizar Todos</button>
+                    <button class="secondary" onclick="toggleAllCharts(false)">📂 Expandir Todos</button>
+                </div>
+            `;
             
-            // Reordenar exames para o gráfico (pela data crescente)
             const sortedExams = [...allExams].sort((a, b) => a.date.localeCompare(b.date));
             const grouped = sortedExams.reduce((acc, curr) => {
                 if (!acc[curr.marker_name]) acc[curr.marker_name] = [];
@@ -373,7 +430,15 @@
                 const markerInfo = markers.find(m => m.name === markerName);
                 const card = document.createElement('div');
                 card.className = 'card';
-                card.innerHTML = `<h3>${markerName}</h3><canvas id="chart-${markerName}"></canvas>`;
+                card.innerHTML = `
+                    <div class="chart-header" onclick="toggleChart('${markerName}')">
+                        <h3 style="margin:0">${markerName}</h3>
+                        <span id="icon-${markerName}" style="font-size: 1.2rem;">➖</span>
+                    </div>
+                    <div id="content-${markerName}" class="chart-content">
+                        <canvas id="chart-${markerName}" style="margin-top:15px"></canvas>
+                    </div>
+                `;
                 container.appendChild(card);
 
                 const annotations = {};
