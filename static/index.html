@@ -426,7 +426,10 @@
                 return acc;
             }, {});
 
-            for (const [markerName, records] of Object.entries(grouped)) {
+            const sortedMarkerNames = Object.keys(grouped).sort();
+
+            for (const markerName of sortedMarkerNames) {
+                const records = grouped[markerName];
                 const markerInfo = markers.find(m => m.name === markerName);
                 const card = document.createElement('div');
                 card.className = 'card';
