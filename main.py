@@ -73,6 +73,37 @@ def create_marker(marker: MarkerBase, session: Session = Depends(get_db)):
     session.refresh(db_marker)
     return db_marker
 
+@app.put("/api/markers/{marker_id}", response_model=MarkerResponse)
+def update_marker(marker_id: int, marker_data: MarkerBase, session: Session = Depends(get_db)):
+    db_marker = session.query(db.Marker).filter(db.Marker.id == marker_id).first()
+    if not db_marker:
+        raise HTTPException(status_code=404, detail="Marcador não encontrado")
+    
+    new_name = marker_data.name.strip().upper()
+    old_name = db_marker.name
+    
+    # Se o nome mudou, precisamos atualizar os registros vinculados
+    if new_name != old_name:
+        # Verifica se o novo nome já existe em outro ID
+        existing = session.query(db.Marker).filter(db.Marker.name == new_name).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Já existe outro marcador com este nome")
+        
+        # Atualiza o nome no marcador
+        db_marker.name = new_name
+        # Cascata manual para exam_records (caso o SQLite não esteja configurado para tal)
+        session.query(db.ExamRecord).filter(db.ExamRecord.marker_name == old_name).update(
+            {db.ExamRecord.marker_name: new_name},
+            synchronize_session=False
+        )
+    
+    db_marker.min_value = marker_data.min_value
+    db_marker.max_value = marker_data.max_value
+    
+    session.commit()
+    session.refresh(db_marker)
+    return db_marker
+
 @app.delete("/api/markers/{marker_id}")
 def delete_marker(marker_id: int, session: Session = Depends(get_db)):
     marker = session.query(db.Marker).filter(db.Marker.id == marker_id).first()

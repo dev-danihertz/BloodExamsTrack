@@ -143,6 +143,7 @@
             <div class="card">
                 <h3 id="markerFormTitle">Cadastrar Novo Marcador</h3>
                 <form id="markerForm" class="form-row">
+                    <input type="hidden" id="edit_marker_id">
                     <div class="form-group">
                         <label>Nome (ex: Vitamina D)</label>
                         <input type="text" id="m_name" required>
@@ -307,7 +308,7 @@
                     <td>${m.min_value ?? '-'}</td>
                     <td>${m.max_value ?? '-'}</td>
                     <td>
-                        <button class="secondary" onclick="editMarker('${m.name}', ${m.min_value}, ${m.max_value})">Editar</button>
+                        <button class="secondary" onclick="editMarker(${m.id}, '${m.name}', ${m.min_value}, ${m.max_value})">Editar</button>
                         <button class="secondary" style="color: #ef4444" onclick="deleteMarker(${m.id})">Excluir</button>
                     </td>
                 </tr>
@@ -408,9 +409,9 @@
             }
         }
 
-        function editMarker(name, min, max) {
+        function editMarker(id, name, min, max) {
+            document.getElementById('edit_marker_id').value = id;
             document.getElementById('m_name').value = name;
-            document.getElementById('m_name').readOnly = true;
             document.getElementById('m_min').value = min;
             document.getElementById('m_max').value = max;
             document.getElementById('markerFormTitle').innerText = 'Editar Marcador';
@@ -421,7 +422,7 @@
 
         function cancelMarkerEdit() {
             document.getElementById('markerForm').reset();
-            document.getElementById('m_name').readOnly = false;
+            document.getElementById('edit_marker_id').value = '';
             document.getElementById('markerFormTitle').innerText = 'Cadastrar Novo Marcador';
             document.getElementById('m_submit').innerText = 'Cadastrar';
             document.getElementById('m_cancel').classList.add('hidden');
@@ -483,14 +484,26 @@
 
         document.getElementById('markerForm').onsubmit = async (e) => {
             e.preventDefault();
+            const id = document.getElementById('edit_marker_id').value;
             const data = {
                 name: document.getElementById('m_name').value,
                 min_value: parseFloat(document.getElementById('m_min').value) || null,
                 max_value: parseFloat(document.getElementById('m_max').value) || null
             };
-            await fetch('/api/markers', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
-            cancelMarkerEdit();
-            loadMarkers();
+            
+            const url = id ? `/api/markers/${id}` : '/api/markers';
+            const method = id ? 'PUT' : 'POST';
+
+            const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+            
+            if (res.ok) {
+                cancelMarkerEdit();
+                loadMarkers();
+                loadExams(); // Recarrega exames pois o nome pode ter mudado
+            } else {
+                const err = await res.json();
+                alert('Erro: ' + (err.detail || 'Falha ao salvar marcador'));
+            }
         };
 
         document.getElementById('examForm').onsubmit = async (e) => {
@@ -539,46 +552,6 @@
                 </div>
             `;
             
-            const translations = {
-                'VITAMINA D': 'Vitamin D',
-                'GLICOSE': 'Glucose',
-                'GLICOSE EM JEJUM': 'Fasting Glucose',
-                'GLICOSE JEJUM': 'Fasting Glucose',
-                'COLESTEROL TOTAL': 'Total Cholesterol',
-                'HDL': 'HDL Cholesterol',
-                'COLESTEROL HDL': 'HDL Cholesterol',
-                'HDL COLESTEROL': 'HDL Cholesterol',
-                'LDL': 'LDL Cholesterol',
-                'COLESTEROL LDL': 'LDL Cholesterol',
-                'LDL COLESTEROL': 'LDL Cholesterol',
-                'TRIGLICÉRIDES': 'Triglycerides',
-                'HEMOGLOBINA GLICADA': 'HbA1c',
-                'FERRITINA': 'Ferritin',
-                'TSH': 'TSH',
-                'T4 LIVRE': 'Free T4',
-                'B12': 'Vitamin B12',
-                'ÁCIDO ÚRICO': 'Uric Acid',
-                'CREATININA': 'Creatinine',
-                'URÉIA': 'Urea',
-                'FERRO': 'Iron',
-                'HEMOGRAMA': 'Full Blood Count',
-                'MAGNÉSIO': 'Magnesium',
-                'POTÁSSIO': 'Potassium',
-                'SÓDIO': 'Sodium',
-                'CÁLCIO': 'Calcium',
-                'INSULINA': 'Insulin',
-                'PROTEÍNA C REATIVA': 'C-Reactive Protein (CRP)',
-                'ÁCIDO FÓLICO': 'Folate',
-                'COLESTEROL NÃO-HDL': 'Non-HDL Cholesterol',
-                'COLESTEROL NAO-HDL': 'Non-HDL Cholesterol',
-                'COLESTEROL NÃO HDL': 'Non-HDL Cholesterol',
-                'COLESTEROL NAO HDL': 'Non-HDL Cholesterol',
-                'NÃO-HDL': 'Non-HDL Cholesterol',
-                'NAO-HDL': 'Non-HDL Cholesterol',
-                'NÃO HDL': 'Non-HDL Cholesterol',
-                'NAO HDL': 'Non-HDL Cholesterol'
-            };
-
             const sortedExams = [...allExams].sort((a, b) => a.date.localeCompare(b.date));
             const grouped = sortedExams.reduce((acc, curr) => {
                 if (!acc[curr.marker_name]) acc[curr.marker_name] = [];
@@ -592,15 +565,11 @@
                 const records = grouped[markerName];
                 const markerInfo = markers.find(m => m.name === markerName);
                 
-                // Busca a tradução usando o nome limpo e em maiúsculas
-                const cleanName = markerName.trim().toUpperCase();
-                const englishName = translations[cleanName] ? ` (${translations[cleanName]})` : '';
-                
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.innerHTML = `
                     <div class="chart-header" onclick="toggleChart('${markerName}')">
-                        <h3 style="margin:0">${markerName}${englishName}</h3>
+                        <h3 style="margin:0">${markerName}</h3>
                         <span id="icon-${markerName}" style="font-size: 1.2rem;">➖</span>
                     </div>
                     <div id="content-${markerName}" class="chart-content">
