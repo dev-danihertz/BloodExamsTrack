@@ -12,51 +12,66 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = "users"
     id = Column(String, primary_key=True)
-    name = Column(String)
+    name = Column(String, unique=True)
+    password = Column(String) # Hash da senha
     records = relationship("ExamRecord", back_populates="user")
+    markers = relationship("Marker", back_populates="user")
 
 class Marker(Base):
     __tablename__ = "markers"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
+    name = Column(String, index=True)
     min_value = Column(Float, nullable=True)
     max_value = Column(Float, nullable=True)
+    user_id = Column(String, ForeignKey("users.id"))
+    
     records = relationship("ExamRecord", back_populates="marker")
+    user = relationship("User", back_populates="markers")
 
 class ExamRecord(Base):
     __tablename__ = "exam_records"
     id = Column(Integer, primary_key=True, index=True)
     date = Column(String)
-    marker_name = Column(String, ForeignKey("markers.name"))
+    marker_name = Column(String) # Removido ForeignKey direto para permitir nomes iguais em users diferentes
     value = Column(Float)
-    user_id = Column(String, ForeignKey("users.id"), nullable=True) # Permitir nulo temporariamente
+    user_id = Column(String, ForeignKey("users.id"))
     
-    marker = relationship("Marker", back_populates="records")
     user = relationship("User", back_populates="records")
+    # Relacionamento manual ou via query no main.py, já que marker_name não é mais unique globalmente
+    marker = relationship("Marker", primaryjoin="and_(ExamRecord.marker_name==Marker.name, ExamRecord.user_id==Marker.user_id)", foreign_keys=[marker_name, user_id], overlaps="records,user")
 
 Base.metadata.create_all(bind=engine)
 
 def init_db():
-    # Tenta adicionar a coluna. Se falhar, segue em frente.
+    from passlib.context import CryptContext
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    
     with engine.connect() as conn:
-        try:
-            conn.execute(text("ALTER TABLE exam_records ADD COLUMN user_id VARCHAR"))
-            conn.commit()
-        except Exception:
-            pass
+        # Migrações de colunas
+        try: conn.execute(text("ALTER TABLE users ADD COLUMN password VARCHAR")); conn.commit()
+        except Exception: pass
+        
+        try: conn.execute(text("ALTER TABLE markers ADD COLUMN user_id VARCHAR")); conn.commit()
+        except Exception: pass
 
     db = SessionLocal()
     try:
+        # Usuário padrão
         user = db.query(User).filter(User.id == "01").first()
         if not user:
-            user = User(id="01", name="DanHertz")
+            user = User(id="01", name="DANHERTZ", password=pwd_context.hash("1234"))
             db.add(user)
             db.commit()
+        elif not user.password:
+            user.password = pwd_context.hash("1234")
+            db.commit()
         
-        # Tenta vincular o que for possível
+        # Vincula exames órfãos ao usuário 01
         db.execute(text("UPDATE exam_records SET user_id = '01' WHERE user_id IS NULL"))
+        # Vincula marcadores órfãos ao usuário 01
+        db.execute(text("UPDATE markers SET user_id = '01' WHERE user_id IS NULL"))
         db.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Erro na migração: {e}")
     finally:
         db.close()

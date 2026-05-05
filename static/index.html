@@ -11,6 +11,8 @@
         :root { --primary: #2563eb; --bg: #f8fafc; }
         body { font-family: system-ui; background: var(--bg); margin: 0; padding: 20px; }
         .container { max-width: 900px; margin: 0 auto; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .user-info { font-size: 0.9rem; color: #64748b; display: flex; gap: 10px; align-items: center; }
         .tabs { display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 5px; }
         .tab-btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; background: #e2e8f0; font-weight: bold; white-space: nowrap; }
         .tab-btn.active { background: var(--primary); color: white; }
@@ -29,13 +31,47 @@
         .chart-content.collapsed { display: none; }
         .controls-row { display: flex; gap: 10px; margin-bottom: 15px; }
         .duplicate-highlight { background-color: #fef9c3 !important; border-left: 4px solid #facc15; }
+
+        /* Login Overlay */
+        #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .login-card { background: white; padding: 30px; border-radius: 12px; width: 300px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .login-card h2 { margin-top: 0; color: var(--primary); }
+        .login-toggle { margin-top: 15px; text-align: center; font-size: 0.85rem; }
+        .login-toggle span { color: var(--primary); cursor: pointer; text-decoration: underline; }
     </style>
 </head>
 <body>
+    <!-- OVERLAY DE LOGIN -->
+    <div id="login-overlay" class="hidden">
+        <div class="login-card">
+            <h2 id="login-title">Entrar</h2>
+            <form id="loginForm" style="display: flex; flex-direction: column; gap: 15px;">
+                <div class="form-group">
+                    <label>Usuário</label>
+                    <input type="text" id="login_user" required>
+                </div>
+                <div class="form-group">
+                    <label>Senha</label>
+                    <input type="password" id="login_pass" required>
+                </div>
+                <button type="submit" class="main" id="login_submit">Entrar</button>
+            </form>
+            <div class="login-toggle">
+                <p id="login-text">Não tem conta? <span onclick="toggleAuthMode()">Cadastre-se</span></p>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
-        <h1>🩸 BloodExamsTrack</h1>
+        <div class="header-row">
+            <h1>🩸 BloodExamsTrack</h1>
+            <div id="user-display" class="user-info hidden">
+                <span id="current-user-name"></span>
+                <button class="secondary" onclick="logout()">Sair</button>
+            </div>
+        </div>
         
-        <div class="tabs">
+        <div class="tabs" id="main-tabs">
             <button class="tab-btn active" id="btn-dashboard" onclick="showTab('dashboard')">Dashboard</button>
             <button class="tab-btn" id="btn-exams" onclick="showTab('exams')">Histórico/Novo</button>
             <button class="tab-btn" id="btn-markers" onclick="showTab('markers')">Configurar Marcadores</button>
@@ -180,11 +216,86 @@
     <script>
         if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
         Chart.register(ChartDataLabels);
+        
+        let currentUser = JSON.parse(localStorage.getItem('user')) || null;
+        let authMode = 'login'; // 'login' ou 'register'
+
         let markers = [];
         let allExams = [];
         let filteredExams = [];
         let sortConfig = { column: 'date', direction: 'desc' };
         let activeFilters = { start: '', end: '', marker: '' };
+
+        // Wrapper para Fetch com Header de Usuário
+        async function apiFetch(url, options = {}) {
+            if (!currentUser) return logout();
+            
+            options.headers = {
+                ...options.headers,
+                'X-User-ID': currentUser.user_id
+            };
+            
+            const res = await fetch(url, options);
+            if (res.status === 401) return logout();
+            return res;
+        }
+
+        function checkAuth() {
+            const overlay = document.getElementById('login-overlay');
+            const userDisplay = document.getElementById('user-display');
+            
+            if (!currentUser) {
+                overlay.classList.remove('hidden');
+                userDisplay.classList.add('hidden');
+            } else {
+                overlay.classList.add('hidden');
+                userDisplay.classList.remove('hidden');
+                document.getElementById('current-user-name').innerText = currentUser.name;
+                loadMarkers().then(loadExams);
+            }
+        }
+
+        function toggleAuthMode() {
+            authMode = authMode === 'login' ? 'register' : 'login';
+            document.getElementById('login-title').innerText = authMode === 'login' ? 'Entrar' : 'Cadastre-se';
+            document.getElementById('login_submit').innerText = authMode === 'login' ? 'Entrar' : 'Criar Conta';
+            document.getElementById('login-text').innerHTML = authMode === 'login' 
+                ? 'Não tem conta? <span onclick="toggleAuthMode()">Cadastre-se</span>'
+                : 'Já tem conta? <span onclick="toggleAuthMode()">Entrar</span>';
+        }
+
+        document.getElementById('loginForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('login_user').value;
+            const password = document.getElementById('login_pass').value;
+            const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
+            
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, password })
+            });
+            
+            const data = await res.json();
+            if (res.ok) {
+                if (authMode === 'login') {
+                    currentUser = data;
+                    localStorage.setItem('user', JSON.stringify(data));
+                    checkAuth();
+                } else {
+                    alert('Conta criada! Agora faça login.');
+                    toggleAuthMode();
+                }
+            } else {
+                alert(data.detail || 'Erro na autenticação');
+            }
+        };
+
+        function logout() {
+            localStorage.removeItem('user');
+            currentUser = null;
+            location.reload();
+        }
 
         function toggleFilter() {
             document.getElementById('filterSection').classList.toggle('hidden');
@@ -234,7 +345,7 @@
             
             if (!confirm(`Deseja alterar o marcador de ${selectedIds.length} registros para ${newMarker}?`)) return;
 
-            const res = await fetch('/api/exams/bulk-update-marker', {
+            const res = await apiFetch('/api/exams/bulk-update-marker', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ exam_ids: selectedIds, new_marker_name: newMarker })
@@ -291,7 +402,7 @@
         }
 
         async function loadMarkers() {
-            const res = await fetch('/api/markers');
+            const res = await apiFetch('/api/markers');
             markers = await res.json();
             
             // Preenche todos os seletores de marcadores
@@ -316,7 +427,7 @@
         }
 
         async function loadExams() {
-            const res = await fetch('/api/exams');
+            const res = await apiFetch('/api/exams');
             allExams = await res.json();
             
             if (sortConfig.column !== 'date' || sortConfig.direction !== 'desc') {
@@ -404,7 +515,7 @@
 
         async function deleteExam(id) {
             if (confirm('Deseja excluir este registro?')) {
-                await fetch(`/api/exams/${id}`, { method: 'DELETE' });
+                await apiFetch(`/api/exams/${id}`, { method: 'DELETE' });
                 loadExams();
             }
         }
@@ -430,7 +541,7 @@
 
         async function deleteMarker(id) {
             if (confirm('Isso excluirá todos os exames deste marcador. Continuar?')) {
-                await fetch(`/api/markers/${id}`, { method: 'DELETE' });
+                await apiFetch(`/api/markers/${id}`, { method: 'DELETE' });
                 loadMarkers();
                 loadExams();
             }
@@ -454,7 +565,7 @@
             loadingSpan.classList.remove('hidden');
 
             try {
-                const res = await fetch(endpoint, { method: 'POST', body: formData });
+                const res = await apiFetch(endpoint, { method: 'POST', body: formData });
                 const result = await res.json();
                 
                 if (res.ok) {
@@ -479,7 +590,13 @@
 
         function downloadBackup(format) {
             const url = format === 'json' ? '/api/export-json' : '/api/export-csv';
-            window.location.href = url;
+            // Para downloads via APIFetch, precisamos de uma abordagem diferente pois o navegador não envia headers customizados em window.location
+            apiFetch(url).then(res => res.blob()).then(blob => {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = format === 'json' ? 'blood_exams_backup.json' : 'blood_exams.csv';
+                a.click();
+            });
         }
 
         document.getElementById('markerForm').onsubmit = async (e) => {
@@ -494,7 +611,7 @@
             const url = id ? `/api/markers/${id}` : '/api/markers';
             const method = id ? 'PUT' : 'POST';
 
-            const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+            const res = await apiFetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
             
             if (res.ok) {
                 cancelMarkerEdit();
@@ -518,7 +635,7 @@
             const url = id ? `/api/exams/${id}` : '/api/exams';
             const method = id ? 'PUT' : 'POST';
 
-            await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+            await apiFetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
             cancelExamEdit();
             loadExams();
         };
@@ -618,10 +735,10 @@
         }
 
         async function dangerResetDB() {
-            if (confirm('ATENÇÃO: Isso apagará TODOS os dados permanentemente. Continuar?')) {
-                const res = await fetch('/api/danger-reset-db', { method: 'DELETE' });
+            if (confirm('ATENÇÃO: Isso apagará TODOS os seus dados permanentemente. Continuar?')) {
+                const res = await apiFetch('/api/danger-reset-db', { method: 'DELETE' });
                 if (res.ok) {
-                    alert('Banco de dados resetado com sucesso.');
+                    alert('Seus dados foram resetados com sucesso.');
                     window.location.reload();
                 } else {
                     alert('Erro ao resetar banco.');
@@ -631,13 +748,14 @@
 
         function initDates() {
             const today = new Date().toISOString().split('T')[0];
-            document.getElementById('filter_end').value = today;
+            const filterEnd = document.getElementById('filter_end');
+            if (filterEnd) filterEnd.value = today;
             activeFilters.start = '2000-01-01';
             activeFilters.end = today;
         }
 
         initDates();
-        loadMarkers().then(loadExams);
+        checkAuth();
     </script>
 </body>
 </html>
