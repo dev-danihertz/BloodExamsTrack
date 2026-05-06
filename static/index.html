@@ -218,10 +218,7 @@
         if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
         Chart.register(ChartDataLabels);
         
-        // BYPASS TEMPORÁRIO PARA BACKUP
-        let currentUser = {user_id: '01', name: 'DANHERTZ'}; 
-        // let currentUser = JSON.parse(localStorage.getItem('user')) || null;
-        let authMode = 'login'; 
+        let currentUser = JSON.parse(localStorage.getItem('user')) || null;
 
         let markers = [];
         let allExams = [];

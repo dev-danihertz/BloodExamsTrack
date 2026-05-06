@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, create_engine, text
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, create_engine, text, and_
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker, relationship, foreign
 import os
 
 DB_PATH = os.getenv("DATABASE_URL", "sqlite:///./blood_exams.db")
@@ -25,20 +25,17 @@ class Marker(Base):
     max_value = Column(Float, nullable=True)
     user_id = Column(String, ForeignKey("users.id"))
     
-    records = relationship("ExamRecord", back_populates="marker")
     user = relationship("User", back_populates="markers")
 
 class ExamRecord(Base):
     __tablename__ = "exam_records"
     id = Column(Integer, primary_key=True, index=True)
     date = Column(String)
-    marker_name = Column(String) # Removido ForeignKey direto para permitir nomes iguais em users diferentes
+    marker_name = Column(String)
     value = Column(Float)
     user_id = Column(String, ForeignKey("users.id"))
     
     user = relationship("User", back_populates="records")
-    # Relacionamento manual ou via query no main.py, já que marker_name não é mais unique globalmente
-    marker = relationship("Marker", primaryjoin="and_(ExamRecord.marker_name==Marker.name, ExamRecord.user_id==Marker.user_id)", foreign_keys=[marker_name, user_id], overlaps="records,user")
 
 Base.metadata.create_all(bind=engine)
 
@@ -58,17 +55,19 @@ def init_db():
     try:
         # Usuários padrão
         default_users = [
-            {"id": "01", "name": "DANHERTZ", "password": "1234"},
-            {"id": "02", "name": "GISIHERTZ", "password": "1234"}
+            {"id": "01", "name": "DANHERTZ", "password": "drh-1985"},
+            {"id": "02", "name": "GISIHERTZ", "password": "gbh-1986"}
         ]
         
         for u_data in default_users:
             user = db.query(User).filter(User.name == u_data["name"]).first()
             if not user:
-                user = User(id=u_data["id"], name=u_data["name"], password=pwd_context.hash(u_data["password"]))
+                hashed_pw = pwd_context.hash(u_data["password"])
+                user = User(id=u_data["id"], name=u_data["name"], password=hashed_pw)
                 db.add(user)
-            elif not user.password:
-                user.password = pwd_context.hash(u_data["password"])
+            else:
+                hashed_pw = pwd_context.hash(u_data["password"])
+                user.password = hashed_pw
         
         db.commit()
         
@@ -78,6 +77,8 @@ def init_db():
         db.execute(text("UPDATE markers SET user_id = '01' WHERE user_id IS NULL"))
         db.commit()
     except Exception as e:
-        print(f"Erro na migração: {e}")
+        import traceback
+        print(f"Erro na migração detalhado: {e}")
+        traceback.print_exc()
     finally:
         db.close()
