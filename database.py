@@ -41,7 +41,7 @@ Base.metadata.create_all(bind=engine)
 
 def init_db():
     from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
     
     with engine.connect() as conn:
         # Migrações de colunas

@@ -13,7 +13,7 @@ import uuid
 from passlib.context import CryptContext
 
 # Segurança
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # Configura logs
 logging.basicConfig(level=logging.INFO)
