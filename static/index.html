@@ -71,143 +71,144 @@
             </div>
         </div>
         
-        <div class="tabs" id="main-tabs">
-            <button class="tab-btn active" id="btn-dashboard" onclick="showTab('dashboard')">Dashboard</button>
-            <button class="tab-btn" id="btn-exams" onclick="showTab('exams')">Histórico/Novo</button>
-            <button class="tab-btn" id="btn-markers" onclick="showTab('markers')">Configurar Marcadores</button>
-        </div>
-
-        <!-- ABA DASHBOARD (GRÁFICOS) -->
-        <div id="tab-dashboard">
-            <div id="chartsContainer"></div>
-        </div>
-
-        <!-- ABA HISTÓRICO / NOVO -->
-        <div id="tab-exams" class="hidden">
-            <div class="card">
-                <h3 id="examFormTitle">Novo Registro de Exame</h3>
-                <form id="examForm" class="form-row">
-                    <input type="hidden" id="edit_exam_id">
-                    <div class="form-group">
-                        <label>Data</label>
-                        <input type="date" id="exam_date" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Marcador</label>
-                        <select id="exam_marker" required>
-                            <option value="">Selecione...</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Valor</label>
-                        <input type="number" step="0.01" id="exam_value" required>
-                    </div>
-                    <button type="submit" class="main" id="exam_submit">Salvar</button>
-                    <button type="button" class="secondary hidden" id="exam_cancel" onclick="cancelExamEdit()">Cancelar</button>
-                </form>
+        <div id="main-content" class="hidden">
+            <div class="tabs" id="main-tabs">
+                <button class="tab-btn active" id="btn-dashboard" onclick="showTab('dashboard')">Dashboard</button>
+                <button class="tab-btn" id="btn-exams" onclick="showTab('exams')">Histórico/Novo</button>
+                <button class="tab-btn" id="btn-markers" onclick="showTab('markers')">Configurar Marcadores</button>
             </div>
 
-            <div class="card">
-                <h3>Histórico de Registros</h3>
-                <div style="margin-bottom: 15px; padding: 10px; background: #f1f5f9; border-radius: 8px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <label style="font-size: 0.85rem; font-weight: bold;">Importar CSV/JSON:</label>
-                        <input type="file" id="csvFile" accept=".csv,.json" style="width: auto;">
-                        <button id="btnImportCSV" class="secondary" onclick="importCSV()">Subir Arquivo</button>
-                    </div>
-                    <div style="margin-left: auto; display: flex; gap: 10px;">
-                        <button onclick="toggleFilter()" class="secondary" style="background: #eff6ff; border-color: #bfdbfe;">🔍 Filtrar</button>
-                        <button onclick="downloadBackup('json')" class="secondary" style="background: #e0f2fe; border-color: #bae6fd;">💾 Backup (JSON)</button>
-                        <button onclick="downloadBackup('csv')" class="secondary" style="background: #f0fdf4; border-color: #bbf7d0;">📊 Planilha (CSV)</button>
-                    </div>
-                    <span id="importLoading" class="hidden" style="font-size: 0.85rem; color: var(--primary); font-weight: bold; width: 100%;">⌛ Carregando...</span>
-                </div>
+            <!-- ABA DASHBOARD (GRÁFICOS) -->
+            <div id="tab-dashboard">
+                <div id="chartsContainer"></div>
+            </div>
 
-                <!-- SEÇÃO DE FILTRO (OCULTA POR PADRÃO) -->
-                <div id="filterSection" class="hidden" style="margin-bottom: 15px; padding: 15px; background: white; border: 1px solid #e2e8f0; border-radius: 8px;">
-                    <div class="form-row">
+            <!-- ABA HISTÓRICO / NOVO -->
+            <div id="tab-exams" class="hidden">
+                <div class="card">
+                    <h3 id="examFormTitle">Novo Registro de Exame</h3>
+                    <form id="examForm" class="form-row">
+                        <input type="hidden" id="edit_exam_id">
                         <div class="form-group">
-                            <label>Data Inicial</label>
-                            <input type="date" id="filter_start" value="2000-01-01">
-                        </div>
-                        <div class="form-group">
-                            <label>Data Final</label>
-                            <input type="date" id="filter_end">
+                            <label>Data</label>
+                            <input type="date" id="exam_date" required>
                         </div>
                         <div class="form-group">
                             <label>Marcador</label>
-                            <select id="filter_marker">
-                                <option value="">Todos</option>
+                            <select id="exam_marker" required>
+                                <option value="">Selecione...</option>
                             </select>
                         </div>
-                        <div style="display: flex; gap: 5px;">
-                            <button onclick="applyFilters()" class="main" style="margin:0">Aplicar</button>
-                            <button onclick="clearFilters()" class="secondary">Limpar</button>
+                        <div class="form-group">
+                            <label>Valor</label>
+                            <input type="number" step="0.01" id="exam_value" required>
+                        </div>
+                        <button type="submit" class="main" id="exam_submit">Salvar</button>
+                        <button type="button" class="secondary hidden" id="exam_cancel" onclick="cancelExamEdit()">Cancelar</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h3>Histórico de Registros</h3>
+                    <div style="margin-bottom: 15px; padding: 10px; background: #f1f5f9; border-radius: 8px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <label style="font-size: 0.85rem; font-weight: bold;">Importar CSV/JSON:</label>
+                            <input type="file" id="csvFile" accept=".csv,.json" style="width: auto;">
+                            <button id="btnImportCSV" class="secondary" onclick="importCSV()">Subir Arquivo</button>
+                        </div>
+                        <div style="margin-left: auto; display: flex; gap: 10px;">
+                            <button onclick="toggleFilter()" class="secondary" style="background: #eff6ff; border-color: #bfdbfe;">🔍 Filtrar</button>
+                            <button onclick="downloadBackup('json')" class="secondary" style="background: #e0f2fe; border-color: #bae6fd;">💾 Backup (JSON)</button>
+                            <button onclick="downloadBackup('csv')" class="secondary" style="background: #f0fdf4; border-color: #bbf7d0;">📊 Planilha (CSV)</button>
+                        </div>
+                        <span id="importLoading" class="hidden" style="font-size: 0.85rem; color: var(--primary); font-weight: bold; width: 100%;">⌛ Carregando...</span>
+                    </div>
+
+                    <!-- SEÇÃO DE FILTRO (OCULTA POR PADRÃO) -->
+                    <div id="filterSection" class="hidden" style="margin-bottom: 15px; padding: 15px; background: white; border: 1px solid #e2e8f0; border-radius: 8px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Data Inicial</label>
+                                <input type="date" id="filter_start" value="2000-01-01">
+                            </div>
+                            <div class="form-group">
+                                <label>Data Final</label>
+                                <input type="date" id="filter_end">
+                            </div>
+                            <div class="form-group">
+                                <label>Marcador</label>
+                                <select id="filter_marker">
+                                    <option value="">Todos</option>
+                                </select>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button onclick="applyFilters()" class="main" style="margin:0">Aplicar</button>
+                                <button onclick="clearFilters()" class="secondary">Limpar</button>
+                            </div>
                         </div>
                     </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 30px;"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
+                                <th onclick="sortExams('date')">Data <span id="sort-date"></span></th>
+                                <th onclick="sortExams('marker_name')">Marcador <span id="sort-marker_name"></span></th>
+                                <th onclick="sortExams('value')">Valor <span id="sort-value"></span></th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="examTableBody"></tbody>
+                    </table>
+
+                    <!-- AÇÕES EM MASSA (AGORA ABAIXO DA TABELA) -->
+                    <div id="bulkActions" class="hidden" style="margin-top: 15px; padding: 10px; background: #fefce8; border: 1px solid #fef08a; border-radius: 8px; display: flex; gap: 10px; align-items: center;">
+                        <span style="font-size: 0.85rem; font-weight: bold;">Com selecionados:</span>
+                        <select id="bulk_new_marker" style="font-size: 0.85rem; padding: 4px;">
+                            <option value="">Alterar Marcador para...</option>
+                        </select>
+                        <button onclick="bulkEditMarker()" class="secondary" style="background: var(--primary); color: white; border: none;">Alterar Marcador</button>
+                        <button onclick="clearSelection()" class="secondary">Cancelar</button>
+                    </div>
                 </div>
+            </div>
 
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 30px;"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
-                            <th onclick="sortExams('date')">Data <span id="sort-date"></span></th>
-                            <th onclick="sortExams('marker_name')">Marcador <span id="sort-marker_name"></span></th>
-                            <th onclick="sortExams('value')">Valor <span id="sort-value"></span></th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody id="examTableBody"></tbody>
-                </table>
+            <!-- ABA MARCADORES -->
+            <div id="tab-markers" class="hidden">
+                <div class="card">
+                    <h3 id="markerFormTitle">Cadastrar Novo Marcador</h3>
+                    <form id="markerForm" class="form-row">
+                        <input type="hidden" id="edit_marker_id">
+                        <div class="form-group">
+                            <label>Nome (ex: Vitamina D)</label>
+                            <input type="text" id="m_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Mínimo Ref.</label>
+                            <input type="number" step="0.01" id="m_min">
+                        </div>
+                        <div class="form-group">
+                            <label>Máximo Ref.</label>
+                            <input type="number" step="0.01" id="m_max">
+                        </div>
+                        <button type="submit" class="main" id="m_submit">Cadastrar</button>
+                        <button type="button" class="secondary hidden" id="m_cancel" onclick="cancelMarkerEdit()">Cancelar</button>
+                    </form>
 
-                <!-- AÇÕES EM MASSA (AGORA ABAIXO DA TABELA) -->
-                <div id="bulkActions" class="hidden" style="margin-top: 15px; padding: 10px; background: #fefce8; border: 1px solid #fef08a; border-radius: 8px; display: flex; gap: 10px; align-items: center;">
-                    <span style="font-size: 0.85rem; font-weight: bold;">Com selecionados:</span>
-                    <select id="bulk_new_marker" style="font-size: 0.85rem; padding: 4px;">
-                        <option value="">Alterar Marcador para...</option>
-                    </select>
-                    <button onclick="bulkEditMarker()" class="secondary" style="background: var(--primary); color: white; border: none;">Alterar Marcador</button>
-                    <button onclick="clearSelection()" class="secondary">Cancelar</button>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Mínimo</th>
+                                <th>Máximo</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="markerTableBody"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
-            </div>
-        </div>
-
-        <!-- ABA MARCADORES -->
-        <div id="tab-markers" class="hidden">
-            <div class="card">
-                <h3 id="markerFormTitle">Cadastrar Novo Marcador</h3>
-                <form id="markerForm" class="form-row">
-                    <input type="hidden" id="edit_marker_id">
-                    <div class="form-group">
-                        <label>Nome (ex: Vitamina D)</label>
-                        <input type="text" id="m_name" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Mínimo Ref.</label>
-                        <input type="number" step="0.01" id="m_min">
-                    </div>
-                    <div class="form-group">
-                        <label>Máximo Ref.</label>
-                        <input type="number" step="0.01" id="m_max">
-                    </div>
-                    <button type="submit" class="main" id="m_submit">Cadastrar</button>
-                    <button type="button" class="secondary hidden" id="m_cancel" onclick="cancelMarkerEdit()">Cancelar</button>
-                </form>
-
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Nome</th>
-                            <th>Mínimo</th>
-                            <th>Máximo</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody id="markerTableBody"></tbody>
-                </table>
-            </div>
         </div>
     </div>
 
@@ -217,7 +218,10 @@
         if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
         Chart.register(ChartDataLabels);
         
-        let currentUser = JSON.parse(localStorage.getItem('user')) || null;
+        // BYPASS TEMPORÁRIO PARA BACKUP
+        let currentUser = {user_id: '01', name: 'DANHERTZ'}; 
+        // let currentUser = JSON.parse(localStorage.getItem('user')) || null;
+        let authMode = 'login'; 
 
         let markers = [];
         let allExams = [];
@@ -240,15 +244,25 @@
         }
 
         function checkAuth() {
+            console.log("Verificando autenticação...", currentUser);
             const overlay = document.getElementById('login-overlay');
             const userDisplay = document.getElementById('user-display');
+            const mainContent = document.getElementById('main-content');
             
             if (!currentUser) {
                 overlay.classList.remove('hidden');
+                overlay.style.display = 'flex'; // Garante que apareça
                 userDisplay.classList.add('hidden');
+                if (mainContent) mainContent.classList.add('hidden');
             } else {
+                console.log("Usuário logado, escondendo overlay...");
                 overlay.classList.add('hidden');
+                overlay.style.display = 'none'; // Força o desaparecimento
                 userDisplay.classList.remove('hidden');
+                if (mainContent) {
+                    mainContent.classList.remove('hidden');
+                    mainContent.style.display = 'block'; // Garante visibilidade
+                }
                 document.getElementById('current-user-name').innerText = currentUser.name;
                 loadMarkers().then(loadExams);
             }
@@ -256,22 +270,39 @@
 
         document.getElementById('loginForm').onsubmit = async (e) => {
             e.preventDefault();
+            console.log("Tentativa de login iniciada...");
+            const submitBtn = document.getElementById('login_submit');
             const name = document.getElementById('login_user').value;
             const password = document.getElementById('login_pass').value;
             
-            const res = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, password })
-            });
-            
-            const data = await res.json();
-            if (res.ok) {
-                currentUser = data;
-                localStorage.setItem('user', JSON.stringify(data));
-                checkAuth();
-            } else {
-                alert(data.detail || 'Senha inválida');
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Entrando...';
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, password })
+                });
+                
+                console.log("Resposta do servidor recebida:", res.status);
+                const data = await res.json();
+                if (res.ok) {
+                    console.log("Login bem-sucedido, salvando usuário...");
+                    currentUser = data;
+                    localStorage.setItem('user', JSON.stringify(data));
+                    checkAuth();
+                } else {
+                    console.error("Falha no login:", data.detail);
+                    alert('Erro: ' + (data.detail || 'Usuário ou senha inválidos'));
+                    document.getElementById('login_pass').value = '';
+                }
+            } catch (error) {
+                console.error("Erro na requisição:", error);
+                alert('Erro na conexão com o servidor.');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Entrar';
             }
         };
 
