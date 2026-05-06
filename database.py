@@ -56,17 +56,23 @@ def init_db():
 
     db = SessionLocal()
     try:
-        # Usuário padrão
-        user = db.query(User).filter(User.id == "01").first()
-        if not user:
-            user = User(id="01", name="DANHERTZ", password=pwd_context.hash("1234"))
-            db.add(user)
-            db.commit()
-        elif not user.password:
-            user.password = pwd_context.hash("1234")
-            db.commit()
+        # Usuários padrão
+        default_users = [
+            {"id": "01", "name": "DANHERTZ", "password": "1234"},
+            {"id": "02", "name": "GISIHERTZ", "password": "1234"}
+        ]
         
-        # Vincula exames órfãos ao usuário 01
+        for u_data in default_users:
+            user = db.query(User).filter(User.name == u_data["name"]).first()
+            if not user:
+                user = User(id=u_data["id"], name=u_data["name"], password=pwd_context.hash(u_data["password"]))
+                db.add(user)
+            elif not user.password:
+                user.password = pwd_context.hash(u_data["password"])
+        
+        db.commit()
+        
+        # Vincula exames órfãos ao usuário 01 (DanHertz)
         db.execute(text("UPDATE exam_records SET user_id = '01' WHERE user_id IS NULL"))
         # Vincula marcadores órfãos ao usuário 01
         db.execute(text("UPDATE markers SET user_id = '01' WHERE user_id IS NULL"))

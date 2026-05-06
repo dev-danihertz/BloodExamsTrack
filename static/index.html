@@ -48,7 +48,10 @@
             <form id="loginForm" style="display: flex; flex-direction: column; gap: 15px;">
                 <div class="form-group">
                     <label>Usuário</label>
-                    <input type="text" id="login_user" required>
+                    <select id="login_user" required style="padding: 10px; font-size: 1rem;">
+                        <option value="DANHERTZ">DANHERTZ</option>
+                        <option value="GISIHERTZ">GISIHERTZ</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Senha</label>
@@ -56,9 +59,6 @@
                 </div>
                 <button type="submit" class="main" id="login_submit">Entrar</button>
             </form>
-            <div class="login-toggle">
-                <p id="login-text">Não tem conta? <span onclick="toggleAuthMode()">Cadastre-se</span></p>
-            </div>
         </div>
     </div>
 
@@ -218,7 +218,6 @@
         Chart.register(ChartDataLabels);
         
         let currentUser = JSON.parse(localStorage.getItem('user')) || null;
-        let authMode = 'login'; // 'login' ou 'register'
 
         let markers = [];
         let allExams = [];
@@ -255,22 +254,12 @@
             }
         }
 
-        function toggleAuthMode() {
-            authMode = authMode === 'login' ? 'register' : 'login';
-            document.getElementById('login-title').innerText = authMode === 'login' ? 'Entrar' : 'Cadastre-se';
-            document.getElementById('login_submit').innerText = authMode === 'login' ? 'Entrar' : 'Criar Conta';
-            document.getElementById('login-text').innerHTML = authMode === 'login' 
-                ? 'Não tem conta? <span onclick="toggleAuthMode()">Cadastre-se</span>'
-                : 'Já tem conta? <span onclick="toggleAuthMode()">Entrar</span>';
-        }
-
         document.getElementById('loginForm').onsubmit = async (e) => {
             e.preventDefault();
             const name = document.getElementById('login_user').value;
             const password = document.getElementById('login_pass').value;
-            const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
             
-            const res = await fetch(endpoint, {
+            const res = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, password })
@@ -278,16 +267,11 @@
             
             const data = await res.json();
             if (res.ok) {
-                if (authMode === 'login') {
-                    currentUser = data;
-                    localStorage.setItem('user', JSON.stringify(data));
-                    checkAuth();
-                } else {
-                    alert('Conta criada! Agora faça login.');
-                    toggleAuthMode();
-                }
+                currentUser = data;
+                localStorage.setItem('user', JSON.stringify(data));
+                checkAuth();
             } else {
-                alert(data.detail || 'Erro na autenticação');
+                alert(data.detail || 'Senha inválida');
             }
         };
 
