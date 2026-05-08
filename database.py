@@ -60,13 +60,22 @@ def init_db():
         ]
         
         for u_data in default_users:
-            user = db.query(User).filter(User.name == u_data["name"]).first()
+            # Busca primeiro pelo ID, que é a chave primária
+            user = db.query(User).filter(User.id == u_data["id"]).first()
+            
             if not user:
-                hashed_pw = pwd_context.hash(u_data["password"])
+                # Se não achou pelo ID, tenta pelo nome para evitar duplicidade de nomes
+                user = db.query(User).filter(User.name == u_data["name"]).first()
+            
+            hashed_pw = pwd_context.hash(u_data["password"])
+            
+            if not user:
+                # Se realmente não existe nenhum dos dois, cria
                 user = User(id=u_data["id"], name=u_data["name"], password=hashed_pw)
                 db.add(user)
             else:
-                hashed_pw = pwd_context.hash(u_data["password"])
+                # Se existe, apenas garante que o nome e a senha estão corretos
+                user.name = u_data["name"]
                 user.password = hashed_pw
         
         db.commit()

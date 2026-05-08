@@ -702,7 +702,9 @@
                         <span id="icon-${markerName}" style="font-size: 1.2rem;">➖</span>
                     </div>
                     <div id="content-${markerName}" class="chart-content">
-                        <canvas id="chart-${markerName}" style="margin-top:15px"></canvas>
+                        <div style="position: relative; height: 300px; width: 100%; margin-top: 15px;">
+                            <canvas id="chart-${markerName}"></canvas>
+                        </div>
                     </div>
                 `;
                 container.appendChild(card);
@@ -729,6 +731,8 @@
                         }]
                     },
                     options: { 
+                        responsive: true,
+                        maintainAspectRatio: false,
                         plugins: { 
                             annotation: { annotations },
                             datalabels: {
